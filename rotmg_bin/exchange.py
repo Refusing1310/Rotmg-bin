@@ -78,7 +78,7 @@ def _policy(raw):
     lower = _integer(raw.get("minimum_payout_bps", DEFAULT_MIN_PAYOUT_BPS),
                      "minimum_payout_bps", maximum=20_000)
     upper = _integer(raw.get("maximum_payout_bps", DEFAULT_MAX_PAYOUT_BPS),
-                     "maximum_payout_bps", maximum=20_000)
+                     "maximum_payout_bps", maximum=100_000)
     if not lower < target < upper:
         raise QuoteInputError("minimum_payout_bps must be < expected_payout_bps "
                               "< maximum_payout_bps")
