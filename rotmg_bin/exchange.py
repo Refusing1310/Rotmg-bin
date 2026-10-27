@@ -1,26 +1,31 @@
-"""Read-only RotMG Bin exchange pricing and final-trade verification.
+"""Offline, randomised multi-item inventory-clearance exchange quotes.
 
-All prices are user-supplied integers in an arbitrary, consistent unit. This
-module never reads the game client, controls input, or performs a trade.
+All prices are manually supplied integer value units. This module neither
+reads the game client nor performs in-game trades.
 """
 from collections import Counter
+import secrets
 
-BASIS_POINTS = 10_000
-DEFAULT_MIN_MARGIN_BPS = 500
-DEFAULT_MAX_MARGIN_BPS = 1_000
-TRADE_ITEM_LIMIT = 8
+BPS = 10_000
+DEFAULT_EXPECTED_PAYOUT_BPS = 9_500   # Long-run target: 95% of deposited value
+DEFAULT_MIN_PAYOUT_BPS = 8_500       # Any single outcome may return 85%+
+DEFAULT_MAX_PAYOUT_BPS = 10_500      # Any single outcome may return up to 105%
+SUPPORTED_CAPACITIES = (8, 16, 24, 32)  # 32 is unverified; planning configuration only
+SINGLE_TRADE_LIMIT = 8              # Conservative, not a verified current UI contract
+MAX_STOCK_UNITS = 128
+MAX_STATES = 50_000
 
 
 class QuoteInputError(ValueError):
-    """Invalid or unsupported manual trade input."""
+    """Invalid or unsupported manual quote input."""
 
 
-def _positive_int(value, field, maximum=None):
-    if type(value) is not int or value < 1 or (
+def _integer(value, field, minimum=1, maximum=None):
+    if type(value) is not int or value < minimum or (
         maximum is not None and value > maximum
     ):
-        limit = f" and at most {maximum}" if maximum is not None else ""
-        raise QuoteInputError(f"{field} must be a positive integer{limit}")
+        limit = f", at most {maximum}" if maximum is not None else ""
+        raise QuoteInputError(f"{field} must be an integer >= {minimum}{limit}")
     return value
 
 
@@ -30,143 +35,239 @@ def _catalog(price_book):
     version = price_book.get("version")
     if not isinstance(version, str) or not version.strip():
         raise QuoteInputError("price_book.version must be a nonempty string")
-    raw = price_book.get("items")
-    if not isinstance(raw, dict) or not raw:
+    items = price_book.get("items")
+    if not isinstance(items, dict) or not items:
         raise QuoteInputError("price_book.items must be a nonempty object")
-    for item_id, info in raw.items():
+    for item_id, item in items.items():
         if not isinstance(item_id, str) or not item_id.strip():
-            raise QuoteInputError("item identifiers must be nonempty strings")
-        if not isinstance(info, dict):
+            raise QuoteInputError("item IDs must be nonempty strings")
+        if not isinstance(item, dict):
             raise QuoteInputError(f"item {item_id!r} must be an object")
-        if not isinstance(info.get("name"), str) or not info["name"].strip():
-            raise QuoteInputError(f"item {item_id!r} needs a display name")
-        _positive_int(info.get("value"), f"item {item_id!r} value")
-        if type(info.get("tradable")) is not bool:
+        if not isinstance(item.get("name"), str) or not item["name"].strip():
+            raise QuoteInputError(f"item {item_id!r} must have a display name")
+        _integer(item.get("value"), f"item {item_id!r} value")
+        if type(item.get("tradable")) is not bool:
             raise QuoteInputError(f"item {item_id!r} needs explicit tradable boolean")
-    return version, raw
+    return version, items
 
 
-def _lines(raw, field, *, allow_duplicates):
+def _lines(raw, field, *, allow_duplicates=True):
     if not isinstance(raw, list):
         raise QuoteInputError(f"{field} must be an array")
-    counts = Counter()
-    for i, line in enumerate(raw):
+    result = Counter()
+    for index, line in enumerate(raw):
         if not isinstance(line, dict):
-            raise QuoteInputError(f"{field}[{i}] must be an object")
+            raise QuoteInputError(f"{field}[{index}] must be an object")
         item_id = line.get("item_id")
         if not isinstance(item_id, str) or not item_id.strip():
-            raise QuoteInputError(f"{field}[{i}].item_id must be a nonempty string")
-        count = _positive_int(line.get("quantity"), f"{field}[{i}].quantity", 10_000)
-        if not allow_duplicates and item_id in counts:
-            raise QuoteInputError(f"duplicate {field} item_id {item_id!r}")
-        counts[item_id] += count
-    return counts
+            raise QuoteInputError(f"{field}[{index}].item_id is required")
+        qty = _integer(line.get("quantity"), f"{field}[{index}].quantity", maximum=128)
+        if not allow_duplicates and item_id in result:
+            raise QuoteInputError(f"duplicate {field} item ID: {item_id}")
+        result[item_id] += qty
+    return result
 
 
 def _policy(raw):
-    if raw is None:
-        raw = {}
+    raw = {} if raw is None else raw
     if not isinstance(raw, dict):
         raise QuoteInputError("policy must be an object")
-    minimum = raw.get("minimum_margin_bps", DEFAULT_MIN_MARGIN_BPS)
-    maximum = raw.get("maximum_margin_bps", DEFAULT_MAX_MARGIN_BPS)
-    _positive_int(minimum, "minimum_margin_bps", BASIS_POINTS - 1)
-    _positive_int(maximum, "maximum_margin_bps", BASIS_POINTS - 1)
-    if minimum > maximum:
-        raise QuoteInputError("minimum_margin_bps cannot exceed maximum_margin_bps")
-    return minimum, maximum
+    target = _integer(raw.get("expected_payout_bps", DEFAULT_EXPECTED_PAYOUT_BPS),
+                      "expected_payout_bps", maximum=20_000)
+    lower = _integer(raw.get("minimum_payout_bps", DEFAULT_MIN_PAYOUT_BPS),
+                     "minimum_payout_bps", maximum=20_000)
+    upper = _integer(raw.get("maximum_payout_bps", DEFAULT_MAX_PAYOUT_BPS),
+                     "maximum_payout_bps", maximum=20_000)
+    if not lower < target < upper:
+        raise QuoteInputError("minimum_payout_bps must be < expected_payout_bps "
+                              "< maximum_payout_bps")
+    capacity = raw.get("inventory_capacity", 24)
+    if type(capacity) is not int or capacity not in SUPPORTED_CAPACITIES:
+        raise QuoteInputError("inventory_capacity must be one of 8, 16, 24, 32")
+    return target, lower, upper, capacity
 
 
 def _normalise(counts):
-    return [{"item_id": k, "quantity": counts[k]} for k in sorted(counts)]
+    return [{"item_id": item_id, "quantity": counts[item_id]}
+            for item_id in sorted(counts)]
 
 
-def quote_exchange(request):
-    """Quote one stock item for 2–8 incoming, tradable item units.
+def _get_candidates(stock, items, input_count, input_value, minimum_bps,
+                    maximum_bps):
+    """Represent each reachable (units, value) by its stable best bundle.
 
-    The price book is manual, not a live-market oracle. An eligible payout must
-    fall between the minimum and maximum margin, inclusive. Among eligible
-    stock entries, the customer receives the most valuable; ties prefer the
-    lexical item id. No match means no trade rather than a poor-value trade.
+    The dynamic-programming frontier is explicitly bounded, preventing an
+    adversarially enormous stock/price book from exhausting memory.
     """
+    minimum_value = (input_value * minimum_bps + BPS - 1) // BPS
+    maximum_value = input_value * maximum_bps // BPS
+    max_count = min(input_count - 1, SINGLE_TRADE_LIMIT)
+    if max_count <= 0:
+        return []
+    available = []
+    for item_id in sorted(stock):
+        item = items[item_id]
+        if not item["tradable"] or item["value"] > maximum_value:
+            continue
+        available.extend([(item_id, item["value"])] *
+                         min(stock[item_id], max_count))
+    if len(available) > MAX_STOCK_UNITS:
+        raise QuoteInputError(f"at most {MAX_STOCK_UNITS} eligible stock units supported")
+    # key: (item count, total value). Same valuation -> prefer fewer
+    # physical items and deterministic lexicographic tie-breaks.
+    states = {(0, 0): ()}
+    for item_id, value in available:
+        next_states = dict(states)
+        for (count, total), bundle in states.items():
+            if count >= max_count or total + value > maximum_value:
+                continue
+            key = (count + 1, total + value)
+            candidate = bundle + (item_id,)
+            if key not in next_states or candidate < next_states[key]:
+                next_states[key] = candidate
+        if len(next_states) > MAX_STATES:
+            raise QuoteInputError("stock combinations exceed safe planning limit")
+        states = next_states
+    # A single representative per distinct payout value, minimising item
+    # count: the user receives fewer items for equivalent value.
+    by_value = {}
+    for (count, value), bundle in states.items():
+        if count and minimum_value <= value <= maximum_value:
+            if value not in by_value or (count, bundle) < (
+                len(by_value[value]), by_value[value]
+            ):
+                by_value[value] = bundle
+    return sorted(by_value.items())
+
+
+def _prepare(request):
     if not isinstance(request, dict):
         raise QuoteInputError("request must be an object")
     version, catalog = _catalog(request.get("price_book"))
-    minimum, maximum = _policy(request.get("policy"))
-    incoming = _lines(request.get("offer"), "offer", allow_duplicates=True)
-    units = sum(incoming.values())
-    if not 2 <= units <= TRADE_ITEM_LIMIT:
-        raise QuoteInputError(f"offer must contain 2 to {TRADE_ITEM_LIMIT} item units")
+    expected, minimum, maximum, capacity = _policy(request.get("policy"))
+    incoming = _lines(request.get("offer"), "offer")
+    input_count = sum(incoming.values())
+    if not 2 <= input_count <= capacity:
+        raise QuoteInputError(f"offer must contain 2 to {capacity} item units")
     stock = _lines(request.get("stock"), "stock", allow_duplicates=False)
     for item_id in incoming:
         if item_id not in catalog:
-            raise QuoteInputError(f"offered item {item_id!r} has no price")
+            raise QuoteInputError(f"offered item {item_id!r} has no known price")
         if not catalog[item_id]["tradable"]:
-            raise QuoteInputError(f"offered item {item_id!r} is not marked tradable")
+            raise QuoteInputError(f"offered item {item_id!r} is not tradable")
     for item_id in stock:
         if item_id not in catalog:
-            raise QuoteInputError(f"stock item {item_id!r} has no price")
-    offer_value = sum(catalog[item_id]["value"] * qty
+            raise QuoteInputError(f"stock item {item_id!r} has no known price")
+    input_value = sum(catalog[item_id]["value"] * qty
                       for item_id, qty in incoming.items())
-    # Use exact integer arithmetic: ceil(lower bound), floor(upper bound).
-    lower = (offer_value * (BASIS_POINTS - maximum) + BASIS_POINTS - 1) // BASIS_POINTS
-    upper = offer_value * (BASIS_POINTS - minimum) // BASIS_POINTS
-    candidates = [
-        (catalog[item_id]["value"], item_id)
-        for item_id, count in stock.items()
-        if count > 0 and catalog[item_id]["tradable"]
-        and lower <= catalog[item_id]["value"] <= upper
-    ]
+    outcomes = _get_candidates(stock, catalog, input_count, input_value,
+                               minimum, maximum)
+    target_numerator = input_value * expected
+    below = [c for c in outcomes if c[0] * BPS < target_numerator]
+    above = [c for c in outcomes if c[0] * BPS > target_numerator]
     base = {
         "price_book_version": version,
         "offer": _normalise(incoming),
-        "offer_value": offer_value,
+        "offer_units": input_count,
+        "offer_value": input_value,
         "value_unit": "user_defined",
-        "inventory_slots_freed": units - 1,
-        "policy": {"minimum_margin_bps": minimum, "maximum_margin_bps": maximum},
+        "policy": {
+            "inventory_capacity": capacity,
+            "expected_payout_bps": expected,
+            "minimum_payout_bps": minimum,
+            "maximum_payout_bps": maximum,
+        },
     }
-    if not candidates:
+    # Require a genuine two-sided, nondegenerate lottery. This ensures the
+    # configured average is *actually achievable* with physical stock items.
+    if not below or not above:
+        return base, None
+    low_value, low_bundle = below[-1]
+    high_value, high_bundle = above[0]
+    span = (high_value - low_value) * BPS
+    upper_wins = target_numerator - low_value * BPS
+    return base, (low_value, low_bundle, high_value, high_bundle,
+                  span, upper_wins, catalog)
+
+
+def quote_exchange(request, *, randbelow=None):
+    """Random payout with exact conditional expected value on given stock.
+
+    randbelow(n) is injectable solely for reproducible offline tests. In
+    normal use, unpredictability comes from secrets.randbelow.
+    """
+    base, lottery = _prepare(request)
+    if lottery is None:
         return {
             **base,
             "status": "unavailable",
-            "reason": "no_tradable_stock_item_within_margin_band",
+            "reason": "no_two_sided_stock_lottery_at_target_value",
             "payout": None,
         }
-    payout_value, payout_id = sorted(candidates, key=lambda row: (-row[0], row[1]))[0]
-    retained = offer_value - payout_value
+    low_value, low_bundle, high_value, high_bundle, span, upper_wins, catalog = lottery
+    generator = secrets.randbelow if randbelow is None else randbelow
+    draw = generator(span)
+    if type(draw) is not int or not 0 <= draw < span:
+        raise QuoteInputError("random draw must be an integer within lottery range")
+    choose_upper = draw < upper_wins
+    value, bundle = ((high_value, high_bundle) if choose_upper
+                     else (low_value, low_bundle))
+    selected = Counter(bundle)
+    payout = [{**line, "name": catalog[line["item_id"]]["name"]}
+              for line in _normalise(selected)]
+    payout_units = len(bundle)
     return {
         **base,
         "status": "quoted",
-        "payout": {
-            "item_id": payout_id,
-            "name": catalog[payout_id]["name"],
-            "quantity": 1,
-            "value": payout_value,
+        "draw": draw,  # Reproducibility only; NOT signed or fraud-resistant.
+        "lottery": {
+            "lower_value": low_value,
+            "upper_value": high_value,
+            "upper_probability_numerator": upper_wins,
+            "probability_denominator": span,
         },
-        "retained_value": retained,
-        "effective_margin_bps_floor": retained * BASIS_POINTS // offer_value,
+        "payout": payout,
+        "payout_units": payout_units,
+        "payout_value": value,
+        "retained_value": base["offer_value"] - value,
+        "inventory_slots_freed": base["offer_units"] - payout_units,
+        "expected_payout_value_numerator": base["offer_value"] *
+                                            base["policy"]["expected_payout_bps"],
+        "expected_payout_value_denominator": BPS,
+        "requires_multi_trade": (base["offer_units"] > SINGLE_TRADE_LIMIT or
+                                 payout_units > SINGLE_TRADE_LIMIT),
+        "settlement": ("manual_design_required" if base["offer_units"] >
+                       SINGLE_TRADE_LIMIT else "single_trade_candidate"),
     }
 
 
 def verify_trade(request, quote, observed_offer, observed_payout):
-    """Requote from the latest manual price book/stock and compare exact items.
+    """Check manual observations against the identical random-draw quote.
 
-    The observed inventories must be entered by a human or a separately
-    reviewed trusted interface. This cannot attest to actual game state and
-    never authorises an automatic click or transfer.
+    The draw is untrusted client-supplied data. This is only a structural
+    consistency check, NOT authentication, stock reservation or settlement.
     """
-    expected = quote_exchange(request)
-    if expected["status"] != "quoted":
-        return {"valid": False, "reason": "no_current_quote"}
-    if type(quote) is not dict or quote != expected:
+    if type(quote) is not dict or type(quote.get("draw")) is not int:
+        return {"valid": False, "reason": "invalid_quote"}
+    try:
+        current = quote_exchange(request, randbelow=lambda _: quote["draw"])
+    except QuoteInputError:
+        return {"valid": False, "reason": "quote_outdated_or_invalid"}
+    if current["status"] != "quoted" or quote != current:
         return {"valid": False, "reason": "quote_outdated_or_modified"}
     try:
-        actual_incoming = _lines(observed_offer, "observed_offer", allow_duplicates=True)
-        actual_outgoing = _lines(observed_payout, "observed_payout", allow_duplicates=False)
+        incoming = _normalise(_lines(observed_offer, "observed_offer"))
+        outgoing = _normalise(_lines(observed_payout, "observed_payout"))
     except QuoteInputError:
         return {"valid": False, "reason": "invalid_trade_observation"}
-    if _normalise(actual_incoming) != quote["offer"]:
+    if incoming != quote["offer"]:
         return {"valid": False, "reason": "incoming_items_changed"}
-    if actual_outgoing != Counter({quote["payout"]["item_id"]: 1}):
-        return {"valid": False, "reason": "outgoing_item_changed"}
+    expected_outgoing = [
+        {"item_id": line["item_id"], "quantity": line["quantity"]}
+        for line in quote["payout"]
+    ]
+    if outgoing != expected_outgoing:
+        return {"valid": False, "reason": "outgoing_items_changed"}
+    if quote["requires_multi_trade"]:
+        return {"valid": False, "reason": "multi_trade_not_supported"}
     return {"valid": True, "reason": "manual_review_matches_quote"}
