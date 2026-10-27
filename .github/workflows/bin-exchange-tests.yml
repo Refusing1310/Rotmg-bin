@@ -6,6 +6,7 @@ on:
       - "rotmg_bin/**"
       - "tests/test_exchange.py"
       - "examples/inventory-clearance.json"
+      - "docs/INVENTORY_CLEARANCE_EXCHANGE.md"
       - ".github/workflows/bin-exchange-tests.yml"
   workflow_dispatch:
 
