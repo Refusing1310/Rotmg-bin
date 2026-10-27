@@ -78,6 +78,13 @@ class RecyclingPlannerTests(unittest.TestCase):
             plan_recycling({"required_materials": {"rare": 1}, "inventory": [
                 item("a", {"rare": -1})]})
 
+    def test_rejects_extremely_large_unlocked_inventory(self):
+        with self.assertRaisesRegex(InputError, "At most 500"):
+            plan_recycling({
+                "required_materials": {"rare": 1},
+                "inventory": [item("many", {"rare": 1}, quantity=501)],
+            })
+
     def test_large_inputs_use_labeled_heuristic(self):
         result = plan_recycling({
             "required_materials": {"rare": 2},
