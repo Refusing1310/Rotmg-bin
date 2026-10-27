@@ -1,0 +1,35 @@
+name: Inventory clearance exchange tests
+
+on:
+  pull_request:
+    paths:
+      - "rotmg_bin/**"
+      - "tests/test_exchange.py"
+      - "examples/inventory-clearance.json"
+      - ".github/workflows/bin-exchange-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile offline code
+        run: python -m compileall -q rotmg_bin
+      - name: Run exchange tests
+        run: python -m unittest discover -s tests -p 'test_exchange.py' -v
+      - name: Smoke-test example
+        run: python -m rotmg_bin examples/inventory-clearance.json
