@@ -2,24 +2,37 @@
   "price_book": {
     "version": "ILLUSTRATIVE-NOT-LIVE",
     "items": {
-      "small-example": {
-        "name": "Example unwanted item",
+      "unwanted": {
+        "name": "Example unwanted equipment",
         "value": 10,
         "tradable": true
       },
-      "reward-example": {
-        "name": "Example consolidated item",
-        "value": 76,
+      "small-reward": {
+        "name": "Example lower-value reward",
+        "value": 72,
         "tradable": true
       },
-      "untradable-example": {
-        "name": "Example soulbound item",
+      "large-reward": {
+        "name": "Example higher-value reward",
+        "value": 80,
+        "tradable": true
+      },
+      "bound": {
+        "name": "Example untradable item",
         "value": 100,
         "tradable": false
       }
     }
   },
-  "offer": [{"item_id": "small-example", "quantity": 8}],
-  "stock": [{"item_id": "reward-example", "quantity": 3}],
-  "policy": {"minimum_margin_bps": 500, "maximum_margin_bps": 1000}
+  "offer": [{"item_id": "unwanted", "quantity": 8}],
+  "stock": [
+    {"item_id": "small-reward", "quantity": 2},
+    {"item_id": "large-reward", "quantity": 2}
+  ],
+  "policy": {
+    "inventory_capacity": 24,
+    "expected_payout_bps": 9500,
+    "minimum_payout_bps": 8500,
+    "maximum_payout_bps": 10500
+  }
 }
