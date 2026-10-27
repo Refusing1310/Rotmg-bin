@@ -1,0 +1,8 @@
+{
+  "required_materials": {"common": 40, "rare": 5},
+  "inventory": [
+    {"id": "spare-a", "name": "Spare item A", "materials": {"common": 20, "rare": 5}, "quantity": 1},
+    {"id": "spare-b", "name": "Spare item B", "materials": {"common": 20}, "quantity": 2},
+    {"id": "favourite", "name": "Keep this item", "materials": {"common": 100, "rare": 100}, "quantity": 1, "locked": true}
+  ]
+}
