@@ -33,8 +33,9 @@ for dismantling. Zero material yields will never be selected.
 - `possible` is based **only on supplied material amounts**, not live recipes.
 - Up to 18 eligible units: exact search minimizing item count, then total
   material excess (raw material units, not an economic valuation).
-- Above 18 eligible units: a deterministic greedy **approximation**,
+- From 19 to 500 eligible units: a deterministic greedy **approximation**,
   explicitly labeled `method: greedy`; it may not find the best selection.
+- More than 500 unlocked eligible units is rejected to prevent excessive processing.
 - A shortfall means even dismantling every unlocked eligible supplied item
   would not meet the specified material requirements.
 - Nothing is deleted, sent to servers, clicked or traded. Data stay local.
