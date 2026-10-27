@@ -46,13 +46,14 @@ def lower(n):
 class QuoteTests(unittest.TestCase):
     def test_randomised_upper_draw(self):
         result = quote_exchange(example(), randbelow=upper)
-        self.assertEqual(result["payout_value"], 80)
-        self.assertEqual(result["payout_units"], 1)
-        self.assertEqual(result["inventory_slots_freed"], 7)
-        self.assertEqual(result["retained_value"], 0)
+        self.assertEqual(result["payout_value"], 152)
+        self.assertEqual(result["payout_units"], 2)
+        self.assertEqual(result["inventory_slots_freed"], 6)
+        self.assertEqual(result["retained_value"], -72)
+        self.assertTrue(result["is_jackpot"])
         self.assertFalse(result["requires_multi_trade"])
         self.assertEqual(result["lottery"]["lower_value"], 72)
-        self.assertEqual(result["lottery"]["upper_value"], 80)
+        self.assertEqual(result["lottery"]["upper_value"], 152)
 
     def test_randomised_lower_draw(self):
         result = quote_exchange(example(), randbelow=lower)
@@ -75,10 +76,12 @@ class QuoteTests(unittest.TestCase):
                               {"item_id": "jackpot", "quantity": 1}])
         high = quote_exchange(data, randbelow=upper)
         low = quote_exchange(data, randbelow=lower)
-        self.assertEqual(high["payout_value"], 84)
+        self.assertEqual(high["payout_value"], 152)  # 68 + 84
         self.assertEqual(low["payout_value"], 68)
-        self.assertEqual(high["lottery"]["upper_probability_numerator"] * 2,
-                         high["lottery"]["probability_denominator"])
+        pool = high["lottery"]
+        chance = Fraction(pool["upper_probability_numerator"],
+                          pool["probability_denominator"])
+        self.assertEqual(chance * 152 + (1 - chance) * 68, 76)
 
     def test_rare_big_win_but_same_ninety_five_percent_expected_value(self):
         data = example(stock=[
@@ -87,7 +90,7 @@ class QuoteTests(unittest.TestCase):
         ])
         win = quote_exchange(data, randbelow=upper)
         loss = quote_exchange(data, randbelow=lower)
-        self.assertEqual(win["payout_value"], 160)
+        self.assertEqual(win["payout_value"], 232)  # 72 + 160 in stock
         self.assertTrue(win["is_profit_for_player"])
         self.assertTrue(win["is_jackpot"])
         self.assertFalse(loss["is_jackpot"])
@@ -95,8 +98,8 @@ class QuoteTests(unittest.TestCase):
         p = win["lottery"]
         chance = Fraction(p["upper_probability_numerator"],
                           p["probability_denominator"])
-        self.assertEqual(chance, Fraction(1, 22))
-        self.assertEqual(chance * 160 + (1 - chance) * 72, 76)
+        self.assertEqual(chance, Fraction(1, 40))
+        self.assertEqual(chance * 232 + (1 - chance) * 72, 76)
 
     def test_three_times_value_jackpot_is_stock_dependent(self):
         data = example(stock=[
@@ -128,10 +131,9 @@ class QuoteTests(unittest.TestCase):
 
     def test_fewer_output_items_in_multi_item_payout(self):
         data = example(stock=[
-            {"item_id": "low", "quantity": 1},
             {"item_id": "quarter", "quantity": 4},
         ])
-        # Upper outcome: 4x quarter = 80; lower outcome: 72.
+        # Upper outcome: 4x quarter = 80; lower outcome: 3x quarter = 60.
         high = quote_exchange(data, randbelow=upper)
         self.assertEqual(high["payout_units"], 4)
         self.assertEqual(high["inventory_slots_freed"], 4)
@@ -143,7 +145,7 @@ class QuoteTests(unittest.TestCase):
         data["price_book"]["items"]["high"]["value"] = 232
         result = quote_exchange(data, randbelow=upper)
         self.assertEqual(result["offer_units"], 24)
-        self.assertEqual(result["inventory_slots_freed"], 23)
+        self.assertEqual(result["inventory_slots_freed"], 22)
         self.assertTrue(result["requires_multi_trade"])
         self.assertEqual(result["settlement"], "manual_design_required")
 
@@ -175,8 +177,11 @@ class QuoteTests(unittest.TestCase):
         data["price_book"]["items"]["low"]["value"] = 224
         data["price_book"]["items"]["high"]["value"] = 232
         quote = quote_exchange(data, randbelow=upper)
-        check = verify_trade(data, quote, data["offer"],
-                             [{"item_id": "high", "quantity": 1}])
+        check = verify_trade(
+            data, quote, data["offer"],
+            [{"item_id": line["item_id"], "quantity": line["quantity"]}
+             for line in quote["payout"]],
+        )
         self.assertEqual(check["reason"], "multi_trade_not_supported")
 
     def test_capacity_24_rejects_25_items(self):
@@ -193,7 +198,7 @@ class QuoteTests(unittest.TestCase):
         data["price_book"]["items"]["high"]["value"] = 60
         quote = quote_exchange(data, randbelow=upper)
         self.assertEqual(quote["offer_units"], 6)
-        self.assertEqual(quote["inventory_slots_freed"], 5)
+        self.assertEqual(quote["inventory_slots_freed"], 4)
 
     def test_default_character_capacity_is_eight(self):
         data = example()
@@ -233,7 +238,7 @@ class QuoteTests(unittest.TestCase):
         ])
         quote = quote_exchange(data, randbelow=upper)
         self.assertEqual(quote["lottery"]["lower_value"], 72)
-        self.assertEqual(quote["lottery"]["upper_value"], 84)
+        self.assertEqual(quote["lottery"]["upper_value"], 236)
 
     def test_untradable_stock_is_excluded(self):
         data = example(stock=[
@@ -300,8 +305,11 @@ class QuoteTests(unittest.TestCase):
     def test_verify_same_upper_quote_and_observed_items(self):
         data = example()
         quote = quote_exchange(data, randbelow=upper)
-        result = verify_trade(data, quote, data["offer"],
-                              [{"item_id": "high", "quantity": 1}])
+        result = verify_trade(
+            data, quote, data["offer"],
+            [{"item_id": line["item_id"], "quantity": line["quantity"]}
+             for line in quote["payout"]],
+        )
         self.assertEqual(result, {
             "valid": True, "reason": "manual_review_matches_quote",
         })
