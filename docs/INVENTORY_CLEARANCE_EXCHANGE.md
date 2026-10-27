@@ -147,11 +147,18 @@ flag for profits and jackpots, and expected-value metadata.
    states). Payout unit count is strictly below deposit unit count.
    A quote exceeding the conservative single-trade allowance is
    **not** suitable for automatic settlement.
-6. **Economics, fairness and game policy:** Manual prices can be wrong,
-   stale or illiquid; valuable inventory may be lost. Game rules,
-   market manipulation, age suitability, user-facing probability
-   disclosures, and whether such a lottery is allowed by DECA
-   require assessment before any public launch or actual transfers.
+6. **Economics, fairness, licensing and game policy:** Manual prices
+   can be wrong, stale or illiquid; valuable inventory may be lost.
+   The UK Gambling Commission considers tradeable virtual items 'money
+   or money’s worth' in some circumstances; operating chance-based
+   item wagering may require a gambling licence in Britain.
+   Such a third-party game-item lottery is **not necessarily equivalent
+   to a game's own nontransferable loot boxes**. No live service,
+   deposits, public beta or promotion until qualified legal counsel has
+   determined jurisdiction, gambling licensing, age verification and
+   consumer protection obligations, **and** DECA's permission/game rules
+   have been assessed. Market manipulation and actual price accuracy
+   are separate unresolved risks.
 7. **External security review:** The production service needs
    independent prelaunch red-team/security testing, ledger/escrow
    review, operational controls, and fraud/race-condition tests.
@@ -166,5 +173,8 @@ flag for profits and jackpots, and expected-value metadata.
 - Check platform and applicable gambling/commercial regulations before
   putting real player items at risk.
 
-Official capacity reference: [DECA's Backpack Extender announcement
-describing 16 to 24 slots](https://remaster.realmofthemadgod.com/?p=3995).
+References:
+- [DECA's Backpack Extender announcement describing 16 to 24 slots](https://remaster.realmofthemadgod.com/?p=3995).
+- [UK Gambling Commission's digital and virtual currencies guidance](https://www.gamblingcommission.gov.uk/licensees-and-businesses/guide/page/digital-and-virtual-currencies).
+- [UK government answer on unlicensed skins gambling, 12 February 2026](https://questions-statements.parliament.uk/written-questions/detail/2026-02-02/HL14167/).
+- [DECA's Realm fair-play update](https://hub.realmofthemadgod.com/news0/news1/guardians).
