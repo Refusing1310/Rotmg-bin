@@ -58,9 +58,10 @@ reserve the chosen stock before revealing the outcome. Current code does
 - Any selected payout contains **strictly fewer item units** than input.
   E.g. 8 in can give 1–7 out. A hypothetical 32-in offer can return
   fewer, but cannot be settled as an atomic in-game trade by this module.
-- Offline payout selection is conservatively restricted to at most
-  **8 outgoing units**. It prefers the fewest returned item units for
-  equal total value, maximising inventory space freed.
+- Offline payout planning can suggest up to **input_count − 1** output
+  units (31 for a hypothetical 32-item input). It prefers the fewest
+  returned item units for equal total value, maximising inventory space freed.
+  Any reward with over 8 units also fails the single-trade safety check.
 - The planner uses a **separate conservative limit of 8 incoming units
   per single trade**. It marks larger offers `requires_multi_trade=true`
   and `settlement=manual_design_required`. The implementation explicitly
@@ -90,7 +91,7 @@ JSON fields:
   combined).
 - `stock`: list of such lines, with distinct item IDs.
 - `policy.inventory_capacity`: 8, 16, 24 (default), or 32.
-- `policy.expected_payout_bps`: default 9500 = 95%.
+- `policy.expected_payout_bps`: default 9500 = 95%; must be below 10000.
 - `policy.minimum_payout_bps`: default 8500 = 85%.
 - `policy.maximum_payout_bps`: default 10500 = 105%.
 
