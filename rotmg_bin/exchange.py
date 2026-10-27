@@ -73,7 +73,7 @@ def _policy(raw):
     if not isinstance(raw, dict):
         raise QuoteInputError("policy must be an object")
     target = _integer(raw.get("expected_payout_bps", DEFAULT_EXPECTED_PAYOUT_BPS),
-                      "expected_payout_bps", maximum=20_000)
+                      "expected_payout_bps", maximum=BPS - 1)
     lower = _integer(raw.get("minimum_payout_bps", DEFAULT_MIN_PAYOUT_BPS),
                      "minimum_payout_bps", maximum=20_000)
     upper = _integer(raw.get("maximum_payout_bps", DEFAULT_MAX_PAYOUT_BPS),
@@ -101,7 +101,9 @@ def _get_candidates(stock, items, input_count, input_value, minimum_bps,
     """
     minimum_value = (input_value * minimum_bps + BPS - 1) // BPS
     maximum_value = input_value * maximum_bps // BPS
-    max_count = min(input_count - 1, SINGLE_TRADE_LIMIT)
+    # Model all physically smaller reward bundles offline. The separate
+    # single-trade limit is enforced only at settlement verification.
+    max_count = input_count - 1
     if max_count <= 0:
         return []
     available = []
