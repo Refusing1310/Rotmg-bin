@@ -13,8 +13,8 @@
         "tradable": true
       },
       "large-reward": {
-        "name": "Illustrative rare jackpot reward",
-        "value": 160,
+        "name": "Illustrative 3x jackpot reward",
+        "value": 240,
         "tradable": true
       },
       "bound": {
