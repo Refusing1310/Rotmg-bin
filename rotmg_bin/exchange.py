@@ -8,9 +8,10 @@ import secrets
 
 BPS = 10_000
 DEFAULT_EXPECTED_PAYOUT_BPS = 9_500   # Long-run target: 95% of deposited value
-DEFAULT_MIN_PAYOUT_BPS = 8_500       # Any single outcome may return 85%+
-DEFAULT_MAX_PAYOUT_BPS = 10_500      # Any single outcome may return up to 105%
-SUPPORTED_CAPACITIES = (8, 16, 24, 32)  # 32 is unverified; planning configuration only
+DEFAULT_MIN_PAYOUT_BPS = 7_000       # Ordinary losses may return as little as 70%
+DEFAULT_MAX_PAYOUT_BPS = 30_000      # Rare stock-backed wins may return up to 300%
+DEFAULT_JACKPOT_THRESHOLD_BPS = 15_000  # At least 150% is a jackpot
+SUPPORTED_CAPACITIES = (8, 16, 24)   # Backpack upgrades vary by character
 SINGLE_TRADE_LIMIT = 8              # Conservative, not a verified current UI contract
 MAX_STOCK_UNITS = 128
 MAX_STATES = 50_000
@@ -81,10 +82,12 @@ def _policy(raw):
     if not lower < target < upper:
         raise QuoteInputError("minimum_payout_bps must be < expected_payout_bps "
                               "< maximum_payout_bps")
-    capacity = raw.get("inventory_capacity", 24)
+    jackpot = _integer(raw.get("jackpot_threshold_bps", DEFAULT_JACKPOT_THRESHOLD_BPS),
+                       "jackpot_threshold_bps", minimum=BPS + 1, maximum=upper)
+    capacity = raw.get("inventory_capacity", 8)
     if type(capacity) is not int or capacity not in SUPPORTED_CAPACITIES:
-        raise QuoteInputError("inventory_capacity must be one of 8, 16, 24, 32")
-    return target, lower, upper, capacity
+        raise QuoteInputError("inventory_capacity must be one of 8, 16, 24")
+    return target, lower, upper, jackpot, capacity
 
 
 def _normalise(counts):
@@ -146,7 +149,7 @@ def _prepare(request):
     if not isinstance(request, dict):
         raise QuoteInputError("request must be an object")
     version, catalog = _catalog(request.get("price_book"))
-    expected, minimum, maximum, capacity = _policy(request.get("policy"))
+    expected, minimum, maximum, jackpot, capacity = _policy(request.get("policy"))
     incoming = _lines(request.get("offer"), "offer")
     input_count = sum(incoming.values())
     if not 2 <= input_count <= capacity:
@@ -178,14 +181,19 @@ def _prepare(request):
             "expected_payout_bps": expected,
             "minimum_payout_bps": minimum,
             "maximum_payout_bps": maximum,
+            "jackpot_threshold_bps": jackpot,
         },
     }
     # Require a genuine two-sided, nondegenerate lottery. This ensures the
     # configured average is *actually achievable* with physical stock items.
     if not below or not above:
         return base, None
+    # Ordinary outcome: as valuable as stock permits below the expected value.
+    # Rare outcome: highest physical reward within the allowed payout band.
+    # Its probability automatically falls as the upper payout becomes bigger.
+    # Without stock worth >100% of the deposit a genuine win isn't possible.
     low_value, low_bundle = below[-1]
-    high_value, high_bundle = above[0]
+    high_value, high_bundle = above[-1]
     span = (high_value - low_value) * BPS
     upper_wins = target_numerator - low_value * BPS
     return base, (low_value, low_bundle, high_value, high_bundle,
@@ -227,10 +235,16 @@ def quote_exchange(request, *, randbelow=None):
             "upper_value": high_value,
             "upper_probability_numerator": upper_wins,
             "probability_denominator": span,
+            "upper_outcome_is_profitable": high_value > base["offer_value"],
+            "upper_outcome_is_jackpot": (high_value * BPS >= base["offer_value"] *
+                                         base["policy"]["jackpot_threshold_bps"]),
         },
         "payout": payout,
         "payout_units": payout_units,
         "payout_value": value,
+        "is_profit_for_player": value > base["offer_value"],
+        "is_jackpot": (value * BPS >= base["offer_value"] *
+                       base["policy"]["jackpot_threshold_bps"]),
         "retained_value": base["offer_value"] - value,
         "inventory_slots_freed": base["offer_units"] - payout_units,
         "expected_payout_value_numerator": base["offer_value"] *
