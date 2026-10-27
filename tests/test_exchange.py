@@ -99,6 +99,30 @@ class QuoteTests(unittest.TestCase):
         self.assertTrue(result["requires_multi_trade"])
         self.assertEqual(result["settlement"], "manual_design_required")
 
+    def test_offline_32_item_offer_can_return_more_than_eight_items(self):
+        data = example(
+            count=32, capacity=32,
+            stock=[{"item_id": "quarter", "quantity": 16}],
+        )
+        # Total offered 320, expected payout 304. 15x20 = 300,
+        # 16x20 = 320. The upper outcome must not be capped at 8.
+        high = quote_exchange(data, randbelow=upper)
+        low = quote_exchange(data, randbelow=lower)
+        self.assertEqual(high["payout_units"], 16)
+        self.assertEqual(low["payout_units"], 15)
+        self.assertEqual(high["inventory_slots_freed"], 16)
+        self.assertTrue(high["requires_multi_trade"])
+        p = high["lottery"]
+        chance = Fraction(p["upper_probability_numerator"],
+                          p["probability_denominator"])
+        self.assertEqual(chance * 320 + (1 - chance) * 300, 304)
+
+    def test_expected_payout_cannot_exceed_deposit(self):
+        data = example()
+        data["policy"]["expected_payout_bps"] = 10_500
+        with self.assertRaises(QuoteInputError):
+            quote_exchange(data)
+
     def test_capacity_32_does_not_imply_atomic_trade(self):
         data = example(count=32, capacity=32)
         data["price_book"]["items"]["low"]["value"] = 300
