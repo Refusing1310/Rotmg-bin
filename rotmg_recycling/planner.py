@@ -7,6 +7,7 @@ from collections import Counter
 from itertools import combinations
 
 EXACT_LIMIT = 18
+MAX_ELIGIBLE_UNITS = 500
 
 
 class InputError(ValueError):
@@ -62,6 +63,8 @@ def _validate(data):
         if locked:
             locked_count += quantity
         elif yields:
+            if len(units) + quantity > MAX_ELIGIBLE_UNITS:
+                raise InputError(f"At most {MAX_ELIGIBLE_UNITS} unlocked item units are supported")
             for copy_number in range(quantity):
                 units.append((item_id, name, copy_number, yields))
     units.sort(key=lambda unit: (unit[0], unit[2]))
