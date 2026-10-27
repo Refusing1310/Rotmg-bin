@@ -13,8 +13,8 @@
         "tradable": true
       },
       "large-reward": {
-        "name": "Example higher-value reward",
-        "value": 80,
+        "name": "Illustrative rare jackpot reward",
+        "value": 160,
         "tradable": true
       },
       "bound": {
@@ -24,15 +24,27 @@
       }
     }
   },
-  "offer": [{"item_id": "unwanted", "quantity": 8}],
+  "offer": [
+    {
+      "item_id": "unwanted",
+      "quantity": 8
+    }
+  ],
   "stock": [
-    {"item_id": "small-reward", "quantity": 2},
-    {"item_id": "large-reward", "quantity": 2}
+    {
+      "item_id": "small-reward",
+      "quantity": 2
+    },
+    {
+      "item_id": "large-reward",
+      "quantity": 1
+    }
   ],
   "policy": {
-    "inventory_capacity": 24,
+    "inventory_capacity": 16,
     "expected_payout_bps": 9500,
-    "minimum_payout_bps": 8500,
-    "maximum_payout_bps": 10500
+    "minimum_payout_bps": 7000,
+    "maximum_payout_bps": 30000,
+    "jackpot_threshold_bps": 15000
   }
 }
