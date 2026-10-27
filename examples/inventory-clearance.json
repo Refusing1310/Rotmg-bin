@@ -1,0 +1,25 @@
+{
+  "price_book": {
+    "version": "ILLUSTRATIVE-NOT-LIVE",
+    "items": {
+      "small-example": {
+        "name": "Example unwanted item",
+        "value": 10,
+        "tradable": true
+      },
+      "reward-example": {
+        "name": "Example consolidated item",
+        "value": 76,
+        "tradable": true
+      },
+      "untradable-example": {
+        "name": "Example soulbound item",
+        "value": 100,
+        "tradable": false
+      }
+    }
+  },
+  "offer": [{"item_id": "small-example", "quantity": 8}],
+  "stock": [{"item_id": "reward-example", "quantity": 3}],
+  "policy": {"minimum_margin_bps": 500, "maximum_margin_bps": 1000}
+}
