@@ -4,6 +4,7 @@ No game integration, account access, input automation, or real acceptance exists
 The outputs are advisory intents, never sent to a game client.
 """
 
+from collections import deque
 from dataclasses import dataclass, field
 from math import isfinite
 from typing import FrozenSet, Optional, Tuple
@@ -132,6 +133,10 @@ class AutoAcceptPolicy:
         self.self_player_id = self_player_id
         self.settings = settings
         self._seen_invitation_ids = set()
+        self._invitation_order = deque()
+        self._seen_final_offers = set()
+        self._final_order = deque()
+        self._max_seen = 2048
         self._sender_request_at = {}
 
     def consider_invitation(
@@ -164,8 +169,15 @@ class AutoAcceptPolicy:
         if last is not None and now - last < self.settings.player_cooldown_seconds:
             return AcceptDecision("sender_cooldown")
 
+        if len(self._invitation_order) >= self._max_seen:
+            self._seen_invitation_ids.discard(self._invitation_order.popleft())
         self._seen_invitation_ids.add(invitation.request_id)
+        self._invitation_order.append(invitation.request_id)
         self._sender_request_at[invitation.sender_player_id] = now
+        self._sender_request_at = {
+            sender: when for sender, when in self._sender_request_at.items()
+            if now - when < self.settings.player_cooldown_seconds
+        }
         return AcceptDecision(
             "eligible_invitation",
             AcceptIntent(
@@ -225,6 +237,13 @@ class AutoAcceptPolicy:
             return AcceptDecision("unknown_incoming_item")
         if len(initial.incoming_item_ids) > inventory.free_slots:
             return AcceptDecision("insufficient_inventory")
+        reference = (initial.trade_id, initial.revision)
+        if reference in self._seen_final_offers:
+            return AcceptDecision("duplicate_final_offer")
+        if len(self._final_order) >= self._max_seen:
+            self._seen_final_offers.discard(self._final_order.popleft())
+        self._seen_final_offers.add(reference)
+        self._final_order.append(reference)
         return AcceptDecision(
             "verified_gift_intent",
             AcceptIntent(
