@@ -35,7 +35,7 @@ _REQUEST = re.compile(
     r"|who\s+(?:has|got|is\s+giving)"
     r"|(?:can|could)\s+(?:someone|anyone|i)\s+(?:give|have|get|trade)"
     r"|looking\s+for|i\s+(?:need|want)"
-    r"|need\s+free|want\s+free|lf\s+free|buying\s+free)\b",
+    r"|\A\s*(?:need|want|lf|buying)\s+free)\b",
     flags=re.IGNORECASE,
 )
 _DENIAL = re.compile(
