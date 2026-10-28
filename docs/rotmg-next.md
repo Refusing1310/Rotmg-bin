@@ -69,3 +69,28 @@ synchronisation. No external dependencies or credentials are required.
 
 Live game automation is **out of scope** unless game-platform permission and
 security requirements are separately validated and authorised.
+
+## Synthetic-event replay (no game integration)
+
+Use the supplied local fixture to inspect the request intents the offline engine
+would create. No game client, screenshot capture, network connection, credentials,
+clicks or actual requests are involved:
+
+```sh
+python -m rotmg_next.replay --self-player-id my-player-id --file examples/free-pot-replay.jsonl
+python -m unittest discover -s tests -p 'test_rotmg_*.py' -v
+```
+
+Input is one JSON object per line, each with a finite nonnegative `at` value
+in nondecreasing monotonic-time order. The synthetic kinds are `chat` (requires
+`event_id`, `sender_id`, `sender_name`, `text`; optional `channel`),
+`inventory` (requires `capacity`, `occupied`, optional `reserved`),
+`trading` (requires Boolean `active`) and `finish` (requires
+`target_player_id`). The output is only JSON summaries of offline
+`trade_request_intent` and `finish_result` events. A `finish` record
+simulates a manual completion acknowledgement; it is **not** an in-game
+trade settlement.
+
+A fixture's `sender_id` is trusted **only for the simulation**; there is no
+authenticated live event source. Do not connect this replay module to client
+automation, and do not treat emitted intents as permission to trade.
