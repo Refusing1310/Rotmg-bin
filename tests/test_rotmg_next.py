@@ -30,6 +30,7 @@ class ChatDetectorTests(unittest.TestCase):
             "handing out free potions",
             "pots for free",
             "anyone want free pots?",
+            "anyone need free pots?",
             "Giving away stat pots",
         ]
         for message in offers:
@@ -44,6 +45,8 @@ class ChatDetectorTests(unittest.TestCase):
             "who has free pots?",
             "looking for free pots",
             "i need free pots",
+            "need free pots",
+            "want free pots",
             "not giving away free pots",
             "I don't have free pots",
             "selling free pots",
