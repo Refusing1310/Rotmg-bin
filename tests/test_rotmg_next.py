@@ -163,6 +163,20 @@ class CoordinatorTests(unittest.TestCase):
             TradeCoordinator("bot", max_seen_events=0)
         with self.assertRaises(ValueError):
             TradeCoordinator("bot", request_timeout_seconds=0)
+        for bad in [float("nan"), float("inf"), True, "30"]:
+            with self.subTest(value=bad):
+                with self.assertRaises(ValueError):
+                    TradeCoordinator("bot", sender_cooldown_seconds=bad)
+                with self.assertRaises(ValueError):
+                    TradeCoordinator("bot", request_timeout_seconds=bad)
+
+    def test_nonfinite_and_boolean_clock_rejected(self):
+        for bad in [float("nan"), float("inf"), float("-inf"), True, "1"]:
+            with self.subTest(value=bad):
+                with self.assertRaises(ValueError):
+                    self.bot.process(event(), self.space, now=bad)
+                with self.assertRaises(ValueError):
+                    self.bot.expire(bad)
 
 
 if __name__ == "__main__":
