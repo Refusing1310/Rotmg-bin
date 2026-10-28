@@ -197,6 +197,10 @@ class FinalGiftTests(unittest.TestCase):
             "outgoing_items_forbidden",
         )
 
+    def test_final_offer_is_not_approved_twice(self):
+        self.assertTrue(self.check().allowed)
+        self.assertEqual(self.check().reason, "duplicate_final_offer")
+
     def test_missing_or_unknown_incoming_items_rejected(self):
         self.assertEqual(
             self.check(
