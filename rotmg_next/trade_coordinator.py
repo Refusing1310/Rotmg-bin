@@ -7,6 +7,7 @@ to translate an intent into a live request.
 
 from collections import deque
 from dataclasses import dataclass
+from math import isfinite
 from typing import Deque, Dict, Optional, Protocol, Set
 
 from .chat_detector import ChatEvent, is_free_potion_offer
@@ -43,6 +44,12 @@ class TradeCoordinator:
     ) -> None:
         if not self_player_id or not self_player_id.strip():
             raise ValueError("self_player_id is required")
+        for label, value in (
+            ("sender_cooldown_seconds", sender_cooldown_seconds),
+            ("request_timeout_seconds", request_timeout_seconds),
+        ):
+            if type(value) not in (int, float) or not isfinite(value):
+                raise ValueError(f"{label} must be a finite number")
         if sender_cooldown_seconds < 0 or request_timeout_seconds <= 0:
             raise ValueError("invalid timing configuration")
         if type(max_seen_events) is not int or max_seen_events < 1:
@@ -67,6 +74,8 @@ class TradeCoordinator:
 
     def expire(self, now: float) -> bool:
         """Clear an expired intent; caller supplies monotonic, numeric time."""
+        if type(now) not in (int, float) or not isfinite(now):
+            raise ValueError("now must be a finite number")
         if self.pending and now - self.pending.created_at >= self.request_timeout_seconds:
             self.pending = None
             return True
