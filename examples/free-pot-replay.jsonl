@@ -1,0 +1,6 @@
+{"kind":"chat","at":0,"event_id":"message-1","sender_id":"player-1","sender_name":"PotionGiver","text":"anyone got free pots?"}
+{"kind":"chat","at":1,"event_id":"message-2","sender_id":"player-2","sender_name":"GenerousPlayer","text":"giving away pots"}
+{"kind":"chat","at":2,"event_id":"message-2","sender_id":"player-2","sender_name":"GenerousPlayer","text":"giving away pots"}
+{"kind":"finish","at":3,"target_player_id":"player-2"}
+{"kind":"chat","at":4,"event_id":"message-3","sender_id":"player-2","sender_name":"GenerousPlayer","text":"still free pots"}
+{"kind":"chat","at":5,"event_id":"message-4","sender_id":"player-3","sender_name":"AnotherGiver","text":"free stat potions"}
