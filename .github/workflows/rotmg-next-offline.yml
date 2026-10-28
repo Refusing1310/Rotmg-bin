@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - 'rotmg_next/**'
-      - 'tests/test_rotmg_next.py'
+      - 'tests/test_rotmg_*.py'
       - 'docs/rotmg-next.md'
       - '.github/workflows/rotmg-next-offline.yml'
   workflow_dispatch:
@@ -25,4 +25,4 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Offline unit tests (no third-party packages)
-        run: python -m unittest discover -s tests -p 'test_rotmg_next.py' -v
+        run: python -m unittest discover -s tests -p 'test_rotmg_*.py' -v
