@@ -9,7 +9,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Deque, Dict, Optional, Protocol, Set
 
-from .chat_detector import ChatEvent, is_free_potion_offer
+from .chat_detector import ChatEvent, is_free_item_offer
 from .inventory_policy import InventorySnapshot
 
 
@@ -101,7 +101,7 @@ class TradeCoordinator:
             return None
         if self.pending is not None or currently_trading or not inventory.can_receive:
             return None
-        if not is_free_potion_offer(event.text):
+        if not is_free_item_offer(event.text):
             return None
 
         last = self._last_request.get(event.sender_id)
