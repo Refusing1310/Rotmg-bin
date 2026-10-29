@@ -13,7 +13,7 @@ behaviour is changed.
 synthetic / recorded ChatEvent
         |
         v
-is_free_potion_offer(text)   [conservative, heuristic]
+is_free_item_offer(text)     [known items or configured aliases]
         |
         v
 TradeCoordinator.process(event, inventory, now)
