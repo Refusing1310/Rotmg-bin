@@ -13,7 +13,7 @@ behaviour is changed.
 synthetic / recorded ChatEvent
         |
         v
-is_free_item_offer(text)     [known items or configured aliases]
+is_free_item_offer(text)     [bare "free", known items or configured aliases]
         |
         v
 TradeCoordinator.process(event, inventory, now)
@@ -79,6 +79,8 @@ It does not turn arbitrary `free <word>` text into a trade intent.
 
 | Chat input | Default decision | Reason |
 | --- | --- | --- |
+| `free`, `FREE!`, `free.` | Match | Common short giveaway announcement; item unspecified |
+| `free?`, `anyone free?` | Ignore | Ambiguous question, not a self-advertised item offer |
 | `free pots`, `free dex`, `free gear` | Match | Known item/term, sender advertises it |
 | `giving away rings`, `I want to give away free dex` | Match | Self-advertised giveaway |
 | `anyone want free gear?` | Match | Offer to the audience, not a request |
@@ -100,7 +102,13 @@ bot = TradeCoordinator("my-player-id", additional_item_aliases=("x",))
 
 Aliases must contain 1-64 characters (letters, digits, spaces, hyphens
 and apostrophes), and are limited to 128 additional names per coordinator.
-Unknown giveaways are deliberately not treated as outgoing requests.
+Unknown **item names** are deliberately not treated as outgoing requests. As an
+exception, a whole-message `free` (case-insensitive, optional `!` or final `.`)
+produces an intent even without an item name (issue #16). This is a higher
+false-positive risk: a player may mean that they are available, rather than
+offering an item. `free?` and additional words are not covered by this exception.
+The user accepted that trade-off for the offline detector. Existing trusted
+sender metadata, cooldown, busy, capacity and deduplication guards still apply.
 Phrase recognition remains heuristic and may miss valid advertisements;
 for live contexts, manual review is preferable to an overbroad detector.
 
