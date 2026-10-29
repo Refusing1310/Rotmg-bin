@@ -69,3 +69,25 @@ synchronisation. No external dependencies or credentials are required.
 
 Live game automation is **out of scope** unless game-platform permission and
 security requirements are separately validated and authorised.
+
+
+## Generic free-item offers (issue #12)
+
+The coordinator now recognises probable giveaway announcements such as
+\`free dex\`, \`free gear\`, \`free x\`, \`giving away t12 weapons\`,
+\`handing out robes\`, \`rings for free\` and \`anyone want free items?\`,
+in addition to the original potion expressions. The public
+\`is_free_potion_offer\` detector remains available and unchanged.
+
+This text-only heuristic intentionally rejects requests for freebies,
+denials, sales, reports about other players, thank-you messages,
+non-item phrases such as \`free space\`, and ambiguous questions.
+Unrecognised slang or long/context-dependent messages may still be
+misclassified; always confirm the offer manually before taking a trade.
+The output is **only an offline trade-request intent** addressed to the
+sender identified in a trusted \`ChatEvent\`. Nothing observes chat or
+executes a game trade.
+
+DECA's March 2026 Terms §6.2 restrict gameplay automation and automated
+requests. Any client connection, trade execution, input automation,
+or live adapter remains unimplemented and unapproved.
