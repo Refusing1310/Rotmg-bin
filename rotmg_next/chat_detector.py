@@ -64,68 +64,86 @@ def is_free_potion_offer(message: str) -> bool:
     return True
 
 
-# Broader giveaway announcements (issue #12). These are heuristics over supplied
-# chat text, not an interface to the game. Sender identity always comes from
-# trusted ChatEvent metadata, never from this content.
-_GENERIC_GIVEAWAY = re.compile(
-    r"\bfree\s+(?:(?:some|any|a|an|my|extra|spare|\d+)\s+)*"
-    r"(?P<free_item>[a-z][\w'-]*)\b"
-    r"|\b(?:giving\s+(?:away|out)|handing\s+out)\s+"
-    r"(?:(?:some|any|a|an|my|extra|spare|free|\d+)\s+)*"
-    r"(?P<given_item>[a-z][\w'-]*)\b"
-    r"|\b(?P<for_free_item>[a-z][\w'-]*)\s+for\s+free\b",
-    flags=re.IGNORECASE,
+# Offline-only giveaway matcher. A known item vocabulary is safer than
+# interpreting arbitrary words following "free" as a tradable item.
+from typing import Iterable
+
+_DEFAULT_ITEM_ALIASES = frozenset({
+    "pot", "pots", "potion", "potions", "stat pot", "stat pots",
+    "stat potion", "stat potions", "life", "life pot", "life pots",
+    "life potion", "life potions", "mana", "mana pot", "mana pots",
+    "mana potion", "mana potions", "dex", "dexterity", "dex pots",
+    "wis", "wisdom", "wis pots", "vit", "vitality", "vit pots",
+    "def", "defense", "defence", "def pots", "att", "attack",
+    "att pots", "spd", "speed", "spd pots", "hp", "mp",
+    "item", "items", "gear", "equipment", "weapon", "weapons",
+    "armor", "armour", "robe", "robes", "ring", "rings",
+    "sword", "swords", "bow", "bows", "dagger", "daggers",
+    "staff", "staves", "wand", "wands", "katana", "katanas",
+    "tome", "tomes", "spell", "spells", "shield", "shields",
+    "seal", "seals", "cloak", "cloaks", "quiver", "quivers",
+    "helm", "helms", "skull", "skulls", "orb", "orbs",
+    "trap", "traps", "prism", "prisms", "poison", "poisons",
+    "star", "stars", "scepter", "scepters", "mace", "maces",
+    "lute", "lutes", "ut", "uts", "tops", "top", "t12 weapons",
+}) | frozenset(f"t{tier}" for tier in range(0, 16))
+
+# Whole-message patterns prevent a third party's report from becoming an
+# outgoing request to the reporter. Capture the claimed items, not names.
+_CTA = r"(?:\s*[-—:|]\s*(?:trade|trd|whisper|pm|dm|msg)\s+[\w-]+)?(?:\s+(?:in|at)\s+(?:nexus|vault))?[.!]*"
+_PREFIX = r"(?:(?:some|a|an|my|extra|spare|free|\d+)\s+)*"
+_GIVEAWAY_PATTERNS = (
+    re.compile(rf"^free\s+(?:(?:some|a|an|my|extra|spare|\d+)\s+)*(?P<item>.+?){_CTA}$", re.I),
+    re.compile(
+        rf"^(?:(?:giving\s+(?:away|out)|handing\s+out|"
+        rf"i(?:'m| am)\s+giving\s+(?:away|out)|"
+        rf"i\s+(?:want\s+to|will)\s+give\s+away))\s+"
+        rf"{_PREFIX}(?P<item>.+?){_CTA}$",
+        re.I,
+    ),
+    re.compile(rf"^i\s+have\s+(?:(?:some|extra|spare)\s+)?free\s+(?P<item>.+?){_CTA}$", re.I),
+    re.compile(rf"^(?P<item>.+?)\s+for\s+free{_CTA}$", re.I),
+    re.compile(r"^anyone\s+(?:wants?|needs?)\s+(?:some\s+)?free\s+(?P<item>.+?)\?$", re.I),
 )
-# Common non-item uses of "free"; deliberately keep the list conservative.
-_NON_ITEM_WORDS = frozenset({
-    "to", "for", "of", "with", "from", "if", "when", "as", "the",
-    "me", "you", "us", "them", "him", "her", "myself", "yourself",
-    "now", "today", "tomorrow", "later", "time", "times",
-    "space", "spaces", "slot", "slots", "room", "rooms", "spot", "spots",
-    "game", "games", "play", "account", "accounts", "trial", "version",
-    "server", "servers", "chat", "guild", "discord", "entry", "access",
-    "help", "run", "runs", "carry", "carrying", "trade", "trades",
-    "is", "are", "was", "were", "be", "being", "been",
-})
-_GENERIC_DENIAL = re.compile(
-    r"\b(?:not|no|never|don't|dont|do\s+not|without|can't|cannot|"
-    r"won't|wont|isn't|wasn't)\s+(?:[\w'-]+\s+){0,4}"
-    r"(?:free|giving\s+(?:away|out)|handing\s+out)\b",
-    flags=re.IGNORECASE,
-)
-_SALE = re.compile(r"\b(?:selling|buying|wts|wtb|lf)\b", re.IGNORECASE)
-_THIRD_PARTY = re.compile(
-    r"\b(?:someone|somebody|anyone|they|he|she|my\s+friend|that\s+guy)"
-    r"\s+(?:(?:is|was|are|were)\s+)?"
-    r"(?:giving\s+(?:away|out)|handing\s+out)\b",
-    re.IGNORECASE,
-)
-_PAST_OR_THANKS = re.compile(
-    r"^\s*(?:thanks?|thank\s+you|ty|thx|"
-    r"i\s+(?:got|received|found|saw|heard)|"
-    r"we\s+(?:got|received|found|saw|heard)|"
-    r"just\s+(?:got|received))\b",
-    flags=re.IGNORECASE,
-)
+_ITEM_ALIAS_PATTERN = re.compile(r"[a-z0-9][a-z0-9 '-]{0,63}\Z")
 
 
-def is_free_item_offer(message: str) -> bool:
-    """Recognise probable item giveaways, including 'free <item>' phrases.
+def _normalise_item_aliases(additional_item_aliases: Iterable[str]) -> frozenset[str]:
+    """Fail closed on misconfigured item names and pathological alias sets."""
+    if isinstance(additional_item_aliases, (str, bytes)):
+        raise ValueError("additional_item_aliases must be an iterable of item names")
+    try:
+        aliases = tuple(additional_item_aliases)
+    except TypeError as exc:
+        raise ValueError("additional_item_aliases must be iterable") from exc
+    if len(aliases) > 128:
+        raise ValueError("too many additional item aliases")
+    normalised = set(_DEFAULT_ITEM_ALIASES)
+    for alias in aliases:
+        if not isinstance(alias, str):
+            raise ValueError("item aliases must be strings")
+        name = " ".join(alias.casefold().split())
+        if not _ITEM_ALIAS_PATTERN.fullmatch(name):
+            raise ValueError(f"invalid item alias: {alias!r}")
+        normalised.add(name)
+    return frozenset(normalised)
 
-    A conservative text heuristic; arbitrary item names may be falsely
-    recognised. Its output is suitable only for offline trade-request intents,
-    never for an automated trade, payment or settlement.
+
+def is_free_item_offer(
+    message: str, *, additional_item_aliases: Iterable[str] = ()
+) -> bool:
+    """Conservatively classify self-advertised item giveaways (offline only).
+
+    Arbitrary 'free X' text is *not* trusted as a game item. Supply custom
+    aliases for item names not included in the default ROTMG vocabulary.
+    Results never authorise trade execution, settlement or payment.
     """
+    aliases = _normalise_item_aliases(additional_item_aliases)
     if not isinstance(message, str) or not message.strip():
         return False
-    if (_REQUEST.search(message) or _GENERIC_DENIAL.search(message)
-            or _SALE.search(message) or _THIRD_PARTY.search(message)
-            or _PAST_OR_THANKS.search(message)):
-        return False
-    if "?" in message and not _OFFER_QUESTION.search(message):
-        return False
-    for candidate in _GENERIC_GIVEAWAY.finditer(message):
-        word = next((w for w in candidate.groupdict().values() if w), "").lower()
-        if word and word not in _NON_ITEM_WORDS:
+    message = " ".join(message.split())
+    for pattern in _GIVEAWAY_PATTERNS:
+        match = pattern.fullmatch(message)
+        if match and " ".join(match.group("item").casefold().split()) in aliases:
             return True
-    return is_free_potion_offer(message)
+    return False
