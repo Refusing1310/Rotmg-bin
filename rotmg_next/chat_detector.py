@@ -117,7 +117,7 @@ def _normalise_item_aliases(additional_item_aliases: Iterable[str]) -> frozenset
         raise ValueError("additional_item_aliases must be iterable") from exc
     if len(aliases) > 128:
         raise ValueError("too many additional item aliases")
-    normalised = set(_DEFAULT_ITEM_ALIASES)
+    normalised = set()
     for alias in aliases:
         if not isinstance(alias, str):
             raise ValueError("item aliases must be strings")
@@ -137,7 +137,7 @@ def is_free_item_offer(
     aliases for item names not included in the default ROTMG vocabulary.
     Results never authorise trade execution, settlement or payment.
     """
-    aliases = _normalise_item_aliases(additional_item_aliases)
+    aliases = _DEFAULT_ITEM_ALIASES | _normalise_item_aliases(additional_item_aliases)
     if not isinstance(message, str) or not message.strip():
         return False
     message = " ".join(message.split())
