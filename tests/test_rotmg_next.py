@@ -7,6 +7,7 @@ from rotmg_next import (
     InventorySnapshot,
     TradeCoordinator,
     is_free_potion_offer,
+    is_free_item_offer,
 )
 
 
@@ -163,6 +164,64 @@ class CoordinatorTests(unittest.TestCase):
             TradeCoordinator("bot", max_seen_events=0)
         with self.assertRaises(ValueError):
             TradeCoordinator("bot", request_timeout_seconds=0)
+
+
+class FreeItemOfferTests(unittest.TestCase):
+    def test_positive_generic_offers(self):
+        cases = [
+            "free pots", "free dex", "free life pots", "free gear",
+            "free items", "free x", "free t12", "free 3 rings",
+            "giving away robes", "giving away some weapons",
+            "giving out spare equipment", "handing out gear",
+            "rings for free", "anyone want free gear?",
+            "anyone need free items?", "Free wis - trade me",
+        ]
+        for message in cases:
+            with self.subTest(message=message):
+                self.assertTrue(is_free_item_offer(message))
+
+    def test_negative_and_ambiguous_generic(self):
+        cases = [
+            "anyone giving free pots?", "anyone got free gear?",
+            "can i get free dex?", "who has free items?",
+            "looking for free rings", "i want free armor",
+            "not giving away free gear", "no free x",
+            "I don't have free gear", "selling free items",
+            "buying free gear", "wtb free rings", "free to play",
+            "free space", "free slots", "free game",
+            "thanks for free dex", "I got free gear",
+            "someone is giving away rings", "they are giving out pots",
+            "free gear?", "free?", "", "pots are expensive",
+        ]
+        for message in cases:
+            with self.subTest(message=message):
+                self.assertFalse(is_free_item_offer(message))
+
+    def test_generic_intent_sender_and_guards(self):
+        bot = TradeCoordinator("bot", sender_cooldown_seconds=30)
+        inventory = InventorySnapshot(8, 6)
+        first = bot.process(
+            event("g1", sender_id="actual", sender_name="ActualSender",
+                  text="free gear - whisper FakeSender"),
+            inventory, now=1,
+        )
+        self.assertIsNotNone(first)
+        self.assertEqual(first.target_player_id, "actual")
+        self.assertIsNone(bot.process(
+            event("g2", sender_id="other", text="free dex"),
+            inventory, now=2,
+        ))
+        self.assertTrue(bot.finish("actual"))
+        self.assertIsNone(bot.process(
+            event("g3", sender_id="actual", text="free rings"),
+            inventory, now=3,
+        ))
+        self.assertIsNotNone(bot.process(
+            event("g4", sender_id="other", text="free rings"),
+            inventory, now=4,
+        ))
+        self.assertFalse(is_free_item_offer(None))
+        self.assertFalse(is_free_item_offer(123))
 
 
 if __name__ == "__main__":
