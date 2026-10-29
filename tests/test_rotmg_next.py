@@ -169,6 +169,7 @@ class CoordinatorTests(unittest.TestCase):
 class FreeItemOfferTests(unittest.TestCase):
     def test_positive_generic_offers(self):
         cases = [
+            "free", " FREE ", "FREE!", "free!!!", "free.",
             "free pots", "free dex", "free life pots", "free gear",
             "free items", "free t12", "free 3 rings",
             "giving away robes", "giving away some weapons",
@@ -193,7 +194,8 @@ class FreeItemOfferTests(unittest.TestCase):
             "free space", "free slots", "free game",
             "thanks for free dex", "I got free gear",
             "someone is giving away rings", "they are giving out pots",
-            "free gear?", "free?", "", "pots are expensive",
+            "free gear?", "free?", "free ?", "anyone free?",
+            "free please", "free to play", "", "pots are expensive",
             "free hugs", "free heals", "free here", "free x",
             "free gear was a scam", "Alice is giving away free dex",
             "someone's giving away pots", "Bob was handing out free gear",
@@ -203,6 +205,58 @@ class FreeItemOfferTests(unittest.TestCase):
         for message in cases:
             with self.subTest(message=message):
                 self.assertFalse(is_free_item_offer(message))
+
+    def test_bare_free_intent_sender_and_existing_guards(self):
+        for text in ("free", " FREE ", "FREE!", "free!!!", "free."):
+            with self.subTest(text=text):
+                bot = TradeCoordinator("bot", sender_cooldown_seconds=30)
+                inventory = InventorySnapshot(8, 7)
+                first = bot.process(
+                    event("bare-1", sender_id="giver", sender_name="RealSender", text=text),
+                    inventory, now=1,
+                )
+                self.assertIsNotNone(first)
+                self.assertEqual(first.target_player_id, "giver")
+                self.assertEqual(first.target_player_name, "RealSender")
+                # One pending intent, regardless of how many others advertise.
+                self.assertIsNone(bot.process(
+                    event("bare-2", sender_id="other", text="free"),
+                    inventory, now=2,
+                ))
+                self.assertTrue(bot.finish("giver"))
+                # Clearing the pending intent does not bypass cooldown.
+                self.assertIsNone(bot.process(
+                    event("bare-3", sender_id="giver", text="free"),
+                    inventory, now=3,
+                ))
+                self.assertIsNone(bot.process(
+                    event("bare-1", sender_id="giver", text="free"),
+                    inventory, now=32,
+                ))
+                self.assertIsNotNone(bot.process(
+                    event("bare-4", sender_id="giver", text="free"),
+                    inventory, now=32,
+                ))
+
+        # Exact-message matching is mandatory, including with misleading text.
+        for text in ("free?", "free please", "free here", "free to play",
+                     "anyone free?", "free gear?", "no free", "free now"):
+            with self.subTest(rejected=text):
+                self.assertFalse(is_free_item_offer(text))
+        full = InventorySnapshot(8, 8)
+        room = InventorySnapshot(8, 7)
+        self.assertIsNone(TradeCoordinator("bot").process(
+            event("full", text="free"), full, now=1,
+        ))
+        self.assertIsNone(TradeCoordinator("bot").process(
+            event("busy", text="free"), room, now=1, currently_trading=True,
+        ))
+        self.assertIsNone(TradeCoordinator("bot").process(
+            event("self", sender_id="bot", text="free"), room, now=1,
+        ))
+        self.assertIsNone(TradeCoordinator("bot").process(
+            event("system", text="free", channel="system"), room, now=1,
+        ))
 
     def test_generic_intent_sender_and_guards(self):
         bot = TradeCoordinator("bot", sender_cooldown_seconds=30)

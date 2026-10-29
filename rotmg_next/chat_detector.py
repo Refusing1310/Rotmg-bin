@@ -87,6 +87,11 @@ _DEFAULT_ITEM_ALIASES = frozenset({
     "lute", "lutes", "ut", "uts", "tops", "top", "t12 weapons",
 }) | frozenset(f"t{tier}" for tier in range(0, 16))
 
+# A one-word "free" chat message is commonly a giveaway announcement, but
+# also potentially ambiguous. Only accept the entire word with optional
+# emphatic punctuation; never treat "free?" as an offer.
+_BARE_GIVEAWAY = re.compile(r"free(?:!+|\.)?", re.I)
+
 # Whole-message patterns prevent a third party's report from becoming an
 # outgoing request to the reporter. Capture the claimed items, not names.
 _CTA = r"(?:\s*[-—:|]\s*(?:trade|trd|whisper|pm|dm|msg)\s+[\w-]+)?(?:\s+(?:in|at)\s+(?:nexus|vault))?[.!]*"
@@ -133,6 +138,7 @@ def is_free_item_offer(
 ) -> bool:
     """Conservatively classify self-advertised item giveaways (offline only).
 
+    A bare 'free' is interpreted as an ambiguous item giveaway signal.
     Arbitrary 'free X' text is *not* trusted as a game item. Supply custom
     aliases for item names not included in the default ROTMG vocabulary.
     Results never authorise trade execution, settlement or payment.
@@ -141,6 +147,8 @@ def is_free_item_offer(
     if not isinstance(message, str) or not message.strip():
         return False
     message = " ".join(message.split())
+    if _BARE_GIVEAWAY.fullmatch(message):
+        return True
     for pattern in _GIVEAWAY_PATTERNS:
         match = pattern.fullmatch(message)
         if match and " ".join(match.group("item").casefold().split()) in aliases:
