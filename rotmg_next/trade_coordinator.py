@@ -7,9 +7,9 @@ to translate an intent into a live request.
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Deque, Dict, Optional, Protocol, Set
+from typing import Deque, Dict, Iterable, Optional, Protocol, Set
 
-from .chat_detector import ChatEvent, is_free_item_offer
+from .chat_detector import ChatEvent, _normalise_item_aliases, is_free_item_offer
 from .inventory_policy import InventorySnapshot
 
 
@@ -40,6 +40,7 @@ class TradeCoordinator:
         sender_cooldown_seconds: float = 30.0,
         request_timeout_seconds: float = 10.0,
         max_seen_events: int = 2048,
+        additional_item_aliases: Iterable[str] = (),
     ) -> None:
         if not self_player_id or not self_player_id.strip():
             raise ValueError("self_player_id is required")
@@ -51,6 +52,7 @@ class TradeCoordinator:
         self.sender_cooldown_seconds = sender_cooldown_seconds
         self.request_timeout_seconds = request_timeout_seconds
         self.max_seen_events = max_seen_events
+        self.item_aliases = _normalise_item_aliases(additional_item_aliases)
         self.pending: Optional[TradeRequestIntent] = None
         self._seen_ids: Set[str] = set()
         self._seen_order: Deque[str] = deque()
@@ -101,7 +103,7 @@ class TradeCoordinator:
             return None
         if self.pending is not None or currently_trading or not inventory.can_receive:
             return None
-        if not is_free_item_offer(event.text):
+        if not is_free_item_offer(event.text, additional_item_aliases=self.item_aliases):
             return None
 
         last = self._last_request.get(event.sender_id)
