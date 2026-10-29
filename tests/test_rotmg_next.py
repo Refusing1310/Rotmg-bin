@@ -244,6 +244,19 @@ class FreeItemOfferTests(unittest.TestCase):
             "Alice is giving away free x", additional_item_aliases=("x",)
         ))
 
+
+    def test_many_custom_aliases_do_not_exceed_default_vocabulary_limit(self):
+        aliases = tuple(f"customitem{i}" for i in range(128))
+        bot = TradeCoordinator("bot", additional_item_aliases=aliases)
+        intent = bot.process(
+            event("many", sender_id="giver", text="free customitem127"),
+            InventorySnapshot(8, 7), now=1,
+        )
+        self.assertIsNotNone(intent)
+        self.assertEqual(intent.target_player_id, "giver")
+        with self.assertRaises(ValueError):
+            TradeCoordinator("bot", additional_item_aliases=aliases + ("too_many",))
+
     def test_reject_invalid_alias_configuration(self):
         for aliases in ("x", (None,), ("",), ("a" * 70,), range(2), ("^x.*",)):
             with self.subTest(aliases=aliases):
