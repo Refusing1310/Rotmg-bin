@@ -13,7 +13,7 @@ behaviour is changed.
 synthetic / recorded ChatEvent
         |
         v
-is_free_potion_offer(text)   [conservative, heuristic]
+is_free_item_offer(text)     [known items or configured aliases]
         |
         v
 TradeCoordinator.process(event, inventory, now)
@@ -69,3 +69,48 @@ synchronisation. No external dependencies or credentials are required.
 
 Live game automation is **out of scope** unless game-platform permission and
 security requirements are separately validated and authorised.
+
+
+## Generic free-item offers (issue #12)
+
+The offline coordinator's `is_free_item_offer` classifier recognises
+**self-advertised** giveaways using a controlled ROTMG item vocabulary.
+It does not turn arbitrary `free <word>` text into a trade intent.
+
+| Chat input | Default decision | Reason |
+| --- | --- | --- |
+| `free pots`, `free dex`, `free gear` | Match | Known item/term, sender advertises it |
+| `giving away rings`, `I want to give away free dex` | Match | Self-advertised giveaway |
+| `anyone want free gear?` | Match | Offer to the audience, not a request |
+| `free x` | Ignore by default | Unknown name; add `x` as an explicit item alias |
+| `free hugs`, `free here`, `free gear was a scam` | Ignore | Non-item / non-offer context |
+| `Alice is giving away free dex` | Ignore | Third-party report, not the sender's offer |
+| `anyone giving free pots?` | Ignore | Request to others |
+
+An optional, validated `additional_item_aliases` iterable extends the known
+vocabulary for custom, event-specific, or new ROTMG item names:
+
+```python
+from rotmg_next import TradeCoordinator, is_free_item_offer
+
+assert not is_free_item_offer("free x")
+assert is_free_item_offer("free x", additional_item_aliases=("x",))
+bot = TradeCoordinator("my-player-id", additional_item_aliases=("x",))
+```
+
+Aliases must contain 1-64 characters (letters, digits, spaces, hyphens
+and apostrophes), and are limited to 128 additional names per coordinator.
+Unknown giveaways are deliberately not treated as outgoing requests.
+Phrase recognition remains heuristic and may miss valid advertisements;
+for live contexts, manual review is preferable to an overbroad detector.
+
+The existing `is_free_potion_offer` public API is unchanged.
+`TradeCoordinator.process` emits **offline-only intentions**, never
+an actual request, click, trade confirmation, payment or inventory change.
+Sender identification uses trusted `ChatEvent` metadata, not chat text.
+The pending-request, sender-cooldown, duplicate, busy and inventory guards
+remain in force. No game-client integration or packet access exists.
+
+DECA's current Terms restrict third-party automation used to play the
+game and automated requests. Live trade submission requires documented
+platform permission, not merely passing tests.

@@ -7,6 +7,7 @@ from rotmg_next import (
     InventorySnapshot,
     TradeCoordinator,
     is_free_potion_offer,
+    is_free_item_offer,
 )
 
 
@@ -163,6 +164,140 @@ class CoordinatorTests(unittest.TestCase):
             TradeCoordinator("bot", max_seen_events=0)
         with self.assertRaises(ValueError):
             TradeCoordinator("bot", request_timeout_seconds=0)
+
+
+class FreeItemOfferTests(unittest.TestCase):
+    def test_positive_generic_offers(self):
+        cases = [
+            "free pots", "free dex", "free life pots", "free gear",
+            "free items", "free t12", "free 3 rings",
+            "giving away robes", "giving away some weapons",
+            "giving out spare equipment", "handing out gear",
+            "rings for free", "I want to give away free dex",
+            "I am giving away free rings", "I have free rings",
+            "anyone want free gear?",
+            "anyone need free items?", "Free wis - trade me",
+        ]
+        for message in cases:
+            with self.subTest(message=message):
+                self.assertTrue(is_free_item_offer(message))
+
+    def test_negative_and_ambiguous_generic(self):
+        cases = [
+            "anyone giving free pots?", "anyone got free gear?",
+            "can i get free dex?", "who has free items?",
+            "looking for free rings", "i want free armor",
+            "not giving away free gear", "no free x",
+            "I don't have free gear", "selling free items",
+            "buying free gear", "wtb free rings", "free to play",
+            "free space", "free slots", "free game",
+            "thanks for free dex", "I got free gear",
+            "someone is giving away rings", "they are giving out pots",
+            "free gear?", "free?", "", "pots are expensive",
+            "free hugs", "free heals", "free here", "free x",
+            "free gear was a scam", "Alice is giving away free dex",
+            "someone's giving away pots", "Bob was handing out free gear",
+            "free diamonds", "free tomorrow",
+            "I wanted free pots yesterday",
+        ]
+        for message in cases:
+            with self.subTest(message=message):
+                self.assertFalse(is_free_item_offer(message))
+
+    def test_generic_intent_sender_and_guards(self):
+        bot = TradeCoordinator("bot", sender_cooldown_seconds=30)
+        inventory = InventorySnapshot(8, 6)
+        first = bot.process(
+            event("g1", sender_id="actual", sender_name="ActualSender",
+                  text="free gear - whisper FakeSender"),
+            inventory, now=1,
+        )
+        self.assertIsNotNone(first)
+        self.assertEqual(first.target_player_id, "actual")
+        self.assertIsNone(bot.process(
+            event("g2", sender_id="other", text="free dex"),
+            inventory, now=2,
+        ))
+        self.assertTrue(bot.finish("actual"))
+        self.assertIsNone(bot.process(
+            event("g3", sender_id="actual", text="free rings"),
+            inventory, now=3,
+        ))
+        self.assertIsNotNone(bot.process(
+            event("g4", sender_id="other", text="free rings"),
+            inventory, now=4,
+        ))
+        self.assertFalse(is_free_item_offer(None))
+        self.assertFalse(is_free_item_offer(123))
+
+
+    def test_custom_aliases_are_opt_in(self):
+        self.assertFalse(is_free_item_offer("free x"))
+        self.assertTrue(is_free_item_offer("free x", additional_item_aliases=("x",)))
+        self.assertTrue(is_free_item_offer(
+            "Free Shiny Ancient Orb", additional_item_aliases=("shiny ancient orb",)
+        ))
+        self.assertFalse(is_free_item_offer(
+            "free hugs", additional_item_aliases=("shiny ancient orb",)
+        ))
+        self.assertFalse(is_free_item_offer(
+            "Alice is giving away free x", additional_item_aliases=("x",)
+        ))
+
+
+    def test_many_custom_aliases_do_not_exceed_default_vocabulary_limit(self):
+        aliases = tuple(f"customitem{i}" for i in range(128))
+        bot = TradeCoordinator("bot", additional_item_aliases=aliases)
+        intent = bot.process(
+            event("many", sender_id="giver", text="free customitem127"),
+            InventorySnapshot(8, 7), now=1,
+        )
+        self.assertIsNotNone(intent)
+        self.assertEqual(intent.target_player_id, "giver")
+        with self.assertRaises(ValueError):
+            TradeCoordinator("bot", additional_item_aliases=aliases + ("too_many",))
+
+    def test_reject_invalid_alias_configuration(self):
+        for aliases in ("x", (None,), ("",), ("a" * 70,), range(2), ("^x.*",)):
+            with self.subTest(aliases=aliases):
+                with self.assertRaises(ValueError):
+                    is_free_item_offer("free dex", additional_item_aliases=aliases)
+        with self.assertRaises(ValueError):
+            TradeCoordinator("bot", additional_item_aliases=("^x.*",))
+
+    def test_third_party_messages_never_target_reporter(self):
+        for text in (
+            "Alice is giving away free dex",
+            "somebody's giving away pots",
+            "someone is giving away rings",
+            "they're handing out free gear",
+        ):
+            with self.subTest(text=text):
+                coordinator = TradeCoordinator("bot")
+                self.assertIsNone(coordinator.process(
+                    event("third-party", sender_id="reporter", text=text),
+                    InventorySnapshot(8, 5), now=1,
+                ))
+
+    def test_configured_item_requests_preserve_coordinator_guards(self):
+        bot = TradeCoordinator("bot", additional_item_aliases=("x",))
+        inventory = InventorySnapshot(8, 7)
+        request = bot.process(
+            event("custom", sender_id="giver", sender_name="Giver", text="free x"),
+            inventory, now=2,
+        )
+        self.assertIsNotNone(request)
+        self.assertEqual(request.target_player_id, "giver")
+        self.assertIsNone(bot.process(
+            event("custom-repeat", sender_id="other", text="free dex"),
+            inventory, now=3,
+        ))
+        self.assertTrue(bot.finish("giver"))
+        self.assertIsNone(bot.process(
+            event("other-report", sender_id="reporter",
+                  text="Alice is giving away free dex"),
+            inventory, now=4,
+        ))
 
 
 if __name__ == "__main__":
