@@ -1,6 +1,7 @@
 """Conservative recognition of free-potion announcements in *supplied* chat events."""
 
 from dataclasses import dataclass
+from typing import Iterable
 import re
 
 
@@ -66,8 +67,6 @@ def is_free_potion_offer(message: str) -> bool:
 
 # Offline-only giveaway matcher. A known item vocabulary is safer than
 # interpreting arbitrary words following "free" as a tradable item.
-from typing import Iterable
-
 _DEFAULT_ITEM_ALIASES = frozenset({
     "pot", "pots", "potion", "potions", "stat pot", "stat pots",
     "stat potion", "stat potions", "life", "life pot", "life pots",
