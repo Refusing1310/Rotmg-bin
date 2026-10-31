@@ -57,23 +57,3 @@ class Main:
                 return "vitdex"
             if color[0] == 9 and color[1] == 8 and color[2] == 7:
                 return "defense"
-
-# engine = Main()
-# engine.run("potion.png", "trade.png")
-#
-# # Display the pictured
-# # if top_left:
-# #     cv2.rectangle(img, top_left, bottom_right, 250, 2)
-# # cv2.imshow("OpenCV/Numpy normal", img)
-#
-# # Display the picture in grayscale
-# # cv2.imshow('OpenCV/Numpy grayscale',
-# #            cv2.cvtColor(img, cv2.COLOR_BGRA2GRAY))
-#
-# f = []
-# for (dirpath, dirnames, filenames) in walk("trade_potions"):
-#     f.extend(filenames)
-#     break
-# for file in f:
-#     output = engine.scan("trade_potions/{}".format(file))
-#     print("Trade in --> {}".format(output))
