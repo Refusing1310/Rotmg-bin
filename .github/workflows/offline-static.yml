@@ -1,0 +1,54 @@
+name: Offline static verification
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  offline-static:
+    name: offline-static
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact source revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Parse source without imports, game execution, display or network access
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          files = sorted(Path(".").rglob("*.py"))
+          assert files, "No source files found"
+          for path in files:
+              if ".git" in path.parts:
+                  continue
+              ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+          print(f"Static parse completed for {len(files)} Python sources")
+          PY
+      - name: Verify license and public onboarding safeguards
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          assert Path("LICENCE").is_file(), "Upstream licence must remain present"
+          a = Path("AGENTS.md").read_text(encoding="utf-8").lower()
+          c = Path(".github/copilot-instructions.md").read_text(encoding="utf-8").lower()
+          assert "public software releases" in a and "offline" in a
+          assert "explicit product owner approval" in a
+          assert "copilot" in c
+          PY
